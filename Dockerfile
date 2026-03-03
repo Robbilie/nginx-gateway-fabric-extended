@@ -87,9 +87,10 @@ COPY --from=builder /usr/local/nginx-lua/lib /usr/local/lib/lua
 # Help the musl dynamic linker find LuaJIT (rpath handles it, symlink is a fallback)
 RUN ln -sf /usr/local/luajit/lib/libluajit-5.1.so.2 /usr/local/lib/libluajit-5.1.so.2
 
-# Prepend load_module directives so they land in the main nginx.conf context
+# Place load_module directives in main-includes -- NGF includes this dir at the
+# top of nginx.conf (main context), which is exactly where load_module must live.
 RUN printf 'load_module modules/ndk_http_module.so;\nload_module modules/ngx_http_lua_module.so;\n' \
-    > /etc/nginx/modules/lua.conf
+    > /etc/nginx/main-includes/lua.conf
 
 # Optional: add your own Lua scripts
 # COPY lua/ /etc/nginx/lua/
