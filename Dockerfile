@@ -75,8 +75,8 @@ USER root
 RUN apk add --no-cache pcre
 
 # Dynamic module .so files
-COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /usr/lib64/nginx/modules/
-COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so /usr/lib64/nginx/modules/
+COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /etc/nginx/modules/
+COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so /etc/nginx/modules/
 
 # LuaJIT runtime
 COPY --from=builder /usr/local/luajit/lib    /usr/local/luajit/lib
