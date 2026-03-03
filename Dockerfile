@@ -18,7 +18,7 @@ ARG NGX_DEVEL_KIT_VERSION=0.3.3
 ARG LUA_RESTY_CORE_VERSION=0.1.32
 ARG LUA_RESTY_LRUCACHE_VERSION=0.15
 
-RUN apk add --no-cache build-base pcre-dev openssl-dev zlib-dev wget ca-certificates
+RUN apk add --no-cache build-base pcre2-dev openssl-dev zlib-dev wget ca-certificates
 
 WORKDIR /build
 
@@ -71,8 +71,6 @@ RUN wget -q "https://github.com/openresty/lua-resty-lrucache/archive/v${LUA_REST
 FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.2
 
 USER root
-
-RUN apk add --no-cache pcre
 
 # Dynamic module .so files
 COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /etc/nginx/modules/
