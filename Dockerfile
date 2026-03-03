@@ -54,15 +54,17 @@ RUN cd "nginx-${NGINX_VERSION}" \
     && make modules
 
 # lua-resty-core and lua-resty-lrucache (required runtime Lua libs)
+# PREFIX=/usr/local means files land in /usr/local/share/lua/5.1/resty/
+# which matches LuaJIT's default package.path search locations.
 RUN wget -q "https://github.com/openresty/lua-resty-core/archive/v${LUA_RESTY_CORE_VERSION}.tar.gz" -O resty-core.tar.gz \
     && tar -xzf resty-core.tar.gz \
     && cd "lua-resty-core-${LUA_RESTY_CORE_VERSION}" \
-    && make install PREFIX=/usr/local/nginx-lua
+    && make install PREFIX=/usr/local
 
 RUN wget -q "https://github.com/openresty/lua-resty-lrucache/archive/v${LUA_RESTY_LRUCACHE_VERSION}.tar.gz" -O resty-lrucache.tar.gz \
     && tar -xzf resty-lrucache.tar.gz \
     && cd "lua-resty-lrucache-${LUA_RESTY_LRUCACHE_VERSION}" \
-    && make install PREFIX=/usr/local/nginx-lua
+    && make install PREFIX=/usr/local
 
 # =============================================================================
 # Final image -- layer Lua on top of the unmodified official NGF NGINX image.
@@ -72,24 +74,18 @@ FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.2
 
 USER root
 
-# Dynamic module .so files
+# Dynamic module .so files -- NGF resolves 'modules/' relative to /etc/nginx
 COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /etc/nginx/modules/
 COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so /etc/nginx/modules/
 
 # LuaJIT runtime
 COPY --from=builder /usr/local/luajit/lib    /usr/local/luajit/lib
 
-# lua-resty libraries
-COPY --from=builder /usr/local/nginx-lua/lib /usr/local/lib/lua
+# lua-resty libraries (installed to /usr/local/share/lua/5.1/ in builder)
+COPY --from=builder /usr/local/share/lua /usr/local/share/lua
 
 # Help the musl dynamic linker find LuaJIT (rpath handles it, symlink is a fallback)
 RUN ln -sf /usr/local/luajit/lib/libluajit-5.1.so.2 /usr/local/lib/libluajit-5.1.so.2
-
-# Place load_module directives in main-includes -- NGF includes this dir at the
-# top of nginx.conf (main context), which is exactly where load_module must live.
-RUN mkdir -p /etc/nginx/main-includes \
-    && printf 'load_module modules/ndk_http_module.so;\nload_module modules/ngx_http_lua_module.so;\n' \
-    > /etc/nginx/main-includes/lua.conf
 
 # Optional: add your own Lua scripts
 # COPY lua/ /etc/nginx/lua/
