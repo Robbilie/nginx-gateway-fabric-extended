@@ -3,31 +3,22 @@
 # Adds: ngx_http_lua_module (OpenResty LuaJIT) on top of the official image
 # Note: auth_request is already included in the official NGF NGINX image.
 # =============================================================================
-ARG NGF_VERSION=1.4.0
-FROM ghcr.io/nginxinc/nginx-gateway-fabric/nginx:${NGF_VERSION} AS base
 
 # =============================================================================
-# Builder stage -- compile Lua as a dynamic module against NGINX source
+# Builder stage -- compile Lua as a dynamic module against NGINX source.
+# Uses Alpine (musl libc) to match the NGF base image ABI.
+# NGINX_VERSION must exactly match what NGF ships -- confirmed 1.29.5 from logs.
 # =============================================================================
-FROM debian:bookworm-slim AS builder
+FROM alpine:3.21 AS builder
 
-ARG NGINX_VERSION=1.27.2
+ARG NGINX_VERSION=1.29.5
 ARG LUAJIT_VERSION=2.1-20240314
 ARG LUA_NGINX_MODULE_VERSION=0.10.27
 ARG NGX_DEVEL_KIT_VERSION=0.3.3
 ARG LUA_RESTY_CORE_VERSION=0.1.29
 ARG LUA_RESTY_LRUCACHE_VERSION=0.14
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpcre3-dev \
-    libssl-dev \
-    zlib1g-dev \
-    wget \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base pcre-dev openssl-dev zlib-dev wget ca-certificates
 
 WORKDIR /build
 
@@ -41,7 +32,7 @@ RUN wget -q "https://github.com/openresty/luajit2/archive/v${LUAJIT_VERSION}.tar
 ENV LUAJIT_LIB=/usr/local/luajit/lib
 ENV LUAJIT_INC=/usr/local/luajit/include/luajit-2.1
 
-# ngx_devel_kit (NDK) -- required by lua-nginx-module
+# ngx_devel_kit (required by lua-nginx-module)
 RUN wget -q "https://github.com/vision5/ngx_devel_kit/archive/v${NGX_DEVEL_KIT_VERSION}.tar.gz" -O ndk.tar.gz \
     && tar -xzf ndk.tar.gz
 
@@ -49,11 +40,11 @@ RUN wget -q "https://github.com/vision5/ngx_devel_kit/archive/v${NGX_DEVEL_KIT_V
 RUN wget -q "https://github.com/openresty/lua-nginx-module/archive/v${LUA_NGINX_MODULE_VERSION}.tar.gz" -O lua-nginx.tar.gz \
     && tar -xzf lua-nginx.tar.gz
 
-# NGINX source (needed to compile dynamic modules)
+# NGINX source -- version must match the NGF image exactly
 RUN wget -q "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" -O nginx.tar.gz \
     && tar -xzf nginx.tar.gz
 
-# Build as dynamic modules (.so) -- avoids replacing the NGINX binary entirely
+# Compile as dynamic modules only -- no binary replacement needed
 RUN cd "nginx-${NGINX_VERSION}" \
     && ./configure \
         --with-compat \
@@ -62,7 +53,7 @@ RUN cd "nginx-${NGINX_VERSION}" \
         --with-ld-opt="-Wl,-rpath,${LUAJIT_LIB}" \
     && make modules
 
-# lua-resty-core and lua-resty-lrucache (required runtime libs)
+# lua-resty-core and lua-resty-lrucache (required runtime Lua libs)
 RUN wget -q "https://github.com/openresty/lua-resty-core/archive/v${LUA_RESTY_CORE_VERSION}.tar.gz" -O resty-core.tar.gz \
     && tar -xzf resty-core.tar.gz \
     && cd "lua-resty-core-${LUA_RESTY_CORE_VERSION}" \
@@ -74,35 +65,33 @@ RUN wget -q "https://github.com/openresty/lua-resty-lrucache/archive/v${LUA_REST
     && make install PREFIX=/usr/local/nginx-lua
 
 # =============================================================================
-# Final image -- layer Lua on top of the unmodified official NGF image
+# Final image -- layer Lua on top of the unmodified official NGF NGINX image.
+# Referenced directly (no ARG alias) so Docker uses the correct entrypoint.
 # =============================================================================
-FROM base
+FROM ghcr.io/nginxinc/nginx-gateway-fabric/nginx:2.4.2
 
 USER root
 
-# Runtime dep for LuaJIT shared library (Alpine-based image)
 RUN apk add --no-cache pcre
 
 # Dynamic module .so files
-COPY --from=builder /build/nginx-*/objs/ndk_http_module.so      /usr/lib64/nginx/modules/
-COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so  /usr/lib64/nginx/modules/
+COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /usr/lib64/nginx/modules/
+COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so /usr/lib64/nginx/modules/
 
-# LuaJIT runtime library
+# LuaJIT runtime
 COPY --from=builder /usr/local/luajit/lib    /usr/local/luajit/lib
 
-# lua-resty-core and lua-resty-lrucache
+# lua-resty libraries
 COPY --from=builder /usr/local/nginx-lua/lib /usr/local/lib/lua
 
-# Register LuaJIT with the dynamic linker (Alpine uses /etc/ld-musl-*.path via symlinks;
-# the rpath baked in at compile time handles this, but we symlink as a fallback)
+# Help the musl dynamic linker find LuaJIT (rpath handles it, symlink is a fallback)
 RUN ln -sf /usr/local/luajit/lib/libluajit-5.1.so.2 /usr/local/lib/libluajit-5.1.so.2
 
-# Load the dynamic modules -- must appear at the top of nginx.conf (main context)
+# Prepend load_module directives so they land in the main nginx.conf context
 RUN printf 'load_module modules/ndk_http_module.so;\nload_module modules/ngx_http_lua_module.so;\n' \
     > /etc/nginx/modules/lua.conf
 
-# Optional: copy your own Lua scripts into the image
+# Optional: add your own Lua scripts
 # COPY lua/ /etc/nginx/lua/
 
-# Drop back to the non-root user the official image uses
 USER 101
