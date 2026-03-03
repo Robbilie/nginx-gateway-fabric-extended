@@ -81,7 +81,7 @@ FROM base
 USER root
 
 # Runtime dep for LuaJIT shared library (Alpine-based image)
-RUN apk add --no-cache libpcre
+RUN apk add --no-cache pcre
 
 # Dynamic module .so files
 COPY --from=builder /build/nginx-*/objs/ndk_http_module.so      /usr/lib64/nginx/modules/
