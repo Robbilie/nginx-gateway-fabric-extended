@@ -68,7 +68,7 @@ RUN wget -q "https://github.com/openresty/lua-resty-lrucache/archive/v${LUA_REST
 # Final image -- layer Lua on top of the unmodified official NGF NGINX image.
 # Referenced directly (no ARG alias) so Docker uses the correct entrypoint.
 # =============================================================================
-FROM ghcr.io/nginxinc/nginx-gateway-fabric/nginx:2.4.2
+FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.2
 
 USER root
 
