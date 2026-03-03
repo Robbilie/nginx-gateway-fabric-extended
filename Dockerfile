@@ -53,18 +53,18 @@ RUN cd "nginx-${NGINX_VERSION}" \
         --with-ld-opt="-Wl,-rpath,${LUAJIT_LIB}" \
     && make modules
 
-# lua-resty-core and lua-resty-lrucache (required runtime Lua libs)
-# PREFIX=/usr/local means files land in /usr/local/share/lua/5.1/resty/
-# which matches LuaJIT's default package.path search locations.
+# lua-resty-core and lua-resty-lrucache
+# LUA_LIB_DIR explicitly controls where .lua files are written,
+# ensuring they land in LuaJIT's default package.path search location.
 RUN wget -q "https://github.com/openresty/lua-resty-core/archive/v${LUA_RESTY_CORE_VERSION}.tar.gz" -O resty-core.tar.gz \
     && tar -xzf resty-core.tar.gz \
     && cd "lua-resty-core-${LUA_RESTY_CORE_VERSION}" \
-    && make install PREFIX=/usr/local
+    && make install PREFIX=/usr/local LUA_LIB_DIR=/usr/local/share/lua/5.1
 
 RUN wget -q "https://github.com/openresty/lua-resty-lrucache/archive/v${LUA_RESTY_LRUCACHE_VERSION}.tar.gz" -O resty-lrucache.tar.gz \
     && tar -xzf resty-lrucache.tar.gz \
     && cd "lua-resty-lrucache-${LUA_RESTY_LRUCACHE_VERSION}" \
-    && make install PREFIX=/usr/local
+    && make install PREFIX=/usr/local LUA_LIB_DIR=/usr/local/share/lua/5.1
 
 # =============================================================================
 # Final image -- layer Lua on top of the unmodified official NGF NGINX image.
@@ -79,9 +79,9 @@ COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /etc/nginx/module
 COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so /etc/nginx/modules/
 
 # LuaJIT runtime
-COPY --from=builder /usr/local/luajit/lib    /usr/local/luajit/lib
+COPY --from=builder /usr/local/luajit/lib /usr/local/luajit/lib
 
-# lua-resty libraries (installed to /usr/local/share/lua/5.1/ in builder)
+# lua-resty libraries
 COPY --from=builder /usr/local/share/lua /usr/local/share/lua
 
 # Help the musl dynamic linker find LuaJIT (rpath handles it, symlink is a fallback)
