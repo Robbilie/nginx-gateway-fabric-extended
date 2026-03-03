@@ -80,10 +80,8 @@ FROM base
 
 USER root
 
-# Runtime dep for LuaJIT shared library
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpcre3 \
-    && rm -rf /var/lib/apt/lists/*
+# Runtime dep for LuaJIT shared library (Alpine-based image)
+RUN apk add --no-cache libpcre
 
 # Dynamic module .so files
 COPY --from=builder /build/nginx-*/objs/ndk_http_module.so      /usr/lib64/nginx/modules/
@@ -95,8 +93,9 @@ COPY --from=builder /usr/local/luajit/lib    /usr/local/luajit/lib
 # lua-resty-core and lua-resty-lrucache
 COPY --from=builder /usr/local/nginx-lua/lib /usr/local/lib/lua
 
-# Register LuaJIT with the dynamic linker
-RUN echo "/usr/local/luajit/lib" > /etc/ld.so.conf.d/luajit.conf && ldconfig
+# Register LuaJIT with the dynamic linker (Alpine uses /etc/ld-musl-*.path via symlinks;
+# the rpath baked in at compile time handles this, but we symlink as a fallback)
+RUN ln -sf /usr/local/luajit/lib/libluajit-5.1.so.2 /usr/local/lib/libluajit-5.1.so.2
 
 # Load the dynamic modules -- must appear at the top of nginx.conf (main context)
 RUN printf 'load_module modules/ndk_http_module.so;\nload_module modules/ngx_http_lua_module.so;\n' \
