@@ -12,25 +12,25 @@
 FROM alpine:3.21 AS builder
 
 ARG NGINX_VERSION=1.29.5
-ARG LUAJIT_VERSION=2.1-20250826
 ARG LUA_NGINX_MODULE_VERSION=0.10.29
 ARG NGX_DEVEL_KIT_VERSION=0.3.3
-ARG LUA_RESTY_CORE_VERSION=0.1.32
-ARG LUA_RESTY_LRUCACHE_VERSION=0.15
+ARG LUA_CJSON_VERSION=2.1.0.14
 
-RUN apk add --no-cache build-base pcre2-dev openssl-dev zlib-dev wget ca-certificates
+RUN apk add --no-cache \
+    build-base \
+    pcre2-dev \
+    openssl-dev \
+    zlib-dev \
+    wget \
+    ca-certificates \
+    luajit-dev \
+    lua-resty-core \
+    lua-resty-lrucache
+
+ENV LUAJIT_LIB=/usr/lib
+ENV LUAJIT_INC=/usr/include/luajit-2.1
 
 WORKDIR /build
-
-# LuaJIT
-RUN wget -q "https://github.com/openresty/luajit2/archive/v${LUAJIT_VERSION}.tar.gz" -O luajit.tar.gz \
-    && tar -xzf luajit.tar.gz \
-    && cd "luajit2-${LUAJIT_VERSION}" \
-    && make -j"$(nproc)" \
-    && make install PREFIX=/usr/local/luajit
-
-ENV LUAJIT_LIB=/usr/local/luajit/lib
-ENV LUAJIT_INC=/usr/local/luajit/include/luajit-2.1
 
 # ngx_devel_kit (required by lua-nginx-module)
 RUN wget -q "https://github.com/vision5/ngx_devel_kit/archive/v${NGX_DEVEL_KIT_VERSION}.tar.gz" -O ndk.tar.gz \
@@ -53,39 +53,32 @@ RUN cd "nginx-${NGINX_VERSION}" \
         --with-ld-opt="-Wl,-rpath,${LUAJIT_LIB}" \
     && make modules
 
-# lua-resty-core and lua-resty-lrucache
-# LUA_LIB_DIR explicitly controls where .lua files are written,
-# ensuring they land in LuaJIT's default package.path search location.
-RUN wget -q "https://github.com/openresty/lua-resty-core/archive/v${LUA_RESTY_CORE_VERSION}.tar.gz" -O resty-core.tar.gz \
-    && tar -xzf resty-core.tar.gz \
-    && cd "lua-resty-core-${LUA_RESTY_CORE_VERSION}" \
-    && make install PREFIX=/usr/local LUA_LIB_DIR=/usr/local/share/lua/5.1
-
-RUN wget -q "https://github.com/openresty/lua-resty-lrucache/archive/v${LUA_RESTY_LRUCACHE_VERSION}.tar.gz" -O resty-lrucache.tar.gz \
-    && tar -xzf resty-lrucache.tar.gz \
-    && cd "lua-resty-lrucache-${LUA_RESTY_LRUCACHE_VERSION}" \
-    && make install PREFIX=/usr/local LUA_LIB_DIR=/usr/local/share/lua/5.1
+# lua-cjson -- compiled against LuaJIT so it lands on the correct package.cpath
+RUN wget -q "https://github.com/openresty/lua-cjson/archive/${LUA_CJSON_VERSION}.tar.gz" -O cjson.tar.gz \
+    && tar -xzf cjson.tar.gz \
+    && cd "lua-cjson-${LUA_CJSON_VERSION}" \
+    && make LUA_INCLUDE_DIR=${LUAJIT_INC} \
+    && make install PREFIX=/usr/local CJSON_CMODULE_DIR=/usr/local/lib/lua/5.1
 
 # =============================================================================
 # Final image -- layer Lua on top of the unmodified official NGF NGINX image.
-# Referenced directly (no ARG alias) so Docker uses the correct entrypoint.
 # =============================================================================
 FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.2
 
 USER root
 
-# Dynamic module .so files -- NGF resolves 'modules/' relative to /etc/nginx
+# Dynamic module .so files
 COPY --from=builder /build/nginx-*/objs/ndk_http_module.so     /etc/nginx/modules/
 COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so /etc/nginx/modules/
 
-# LuaJIT runtime
-COPY --from=builder /usr/local/luajit/lib /usr/local/luajit/lib
+# LuaJIT runtime (Alpine package -- built from OpenResty luajit2 sources)
+RUN apk add --no-cache luajit
 
-# lua-resty libraries
-COPY --from=builder /usr/local/share/lua /usr/local/share/lua
+# lua-resty libraries (Alpine packages -- built from official OpenResty sources)
+RUN apk add --no-cache lua-resty-core lua-resty-lrucache
 
-# Help the musl dynamic linker find LuaJIT (rpath handles it, symlink is a fallback)
-RUN ln -sf /usr/local/luajit/lib/libluajit-5.1.so.2 /usr/local/lib/libluajit-5.1.so.2
+# lua-cjson C extension
+COPY --from=builder /usr/local/lib/lua /usr/local/lib/lua
 
 # Optional: add your own Lua scripts
 # COPY lua/ /etc/nginx/lua/
