@@ -11,7 +11,7 @@
 # =============================================================================
 FROM alpine:3.21 AS builder
 
-ARG NGINX_VERSION=1.29.5
+ARG NGINX_VERSION=1.29.7
 ARG LUA_NGINX_MODULE_VERSION=0.10.29
 ARG NGX_DEVEL_KIT_VERSION=0.3.3
 ARG LUA_CJSON_VERSION=2.1.0.14
@@ -63,7 +63,7 @@ RUN wget -q "https://github.com/openresty/lua-cjson/archive/${LUA_CJSON_VERSION}
 # =============================================================================
 # Final image -- layer Lua on top of the unmodified official NGF NGINX image.
 # =============================================================================
-FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.2
+FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.0
 
 USER root
 
