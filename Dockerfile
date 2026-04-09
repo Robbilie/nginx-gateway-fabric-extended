@@ -61,6 +61,11 @@ RUN wget -q "https://github.com/openresty/lua-cjson/archive/${LUA_CJSON_VERSION}
     && make LUA_INCLUDE_DIR=${LUAJIT_INC} \
     && make install PREFIX=/usr/local CJSON_CMODULE_DIR=/usr/local/lib/lua/5.1
 
+RUN mkdir /modules-out \
+    && cp "/build/nginx-${NGINX_VERSION}/objs/ndk_http_module.so"          /modules-out/ \
+    && cp "/build/nginx-${NGINX_VERSION}/objs/ngx_http_lua_module.so"      /modules-out/ \
+    && cp "/build/nginx-${NGINX_VERSION}/objs/ngx_http_set_misc_module.so" /modules-out/
+
 # =============================================================================
 # Final image
 # =============================================================================
@@ -68,9 +73,7 @@ FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.0
 
 USER root
 
-COPY --from=builder /build/nginx-*/objs/ndk_http_module.so          /etc/nginx/modules/
-COPY --from=builder /build/nginx-*/objs/ngx_http_lua_module.so      /etc/nginx/modules/
-COPY --from=builder /build/nginx-*/objs/ngx_http_set_misc_module.so /etc/nginx/modules/
+COPY --from=builder /modules-out/ /etc/nginx/modules/
 
 RUN apk add --no-cache luajit
 RUN apk add --no-cache lua-resty-core lua-resty-lrucache
