@@ -6,7 +6,7 @@
 
 FROM alpine:3.21 AS builder
 
-ARG NGINX_VERSION=1.29.7
+ARG NGINX_VERSION=1.31.1
 ARG LUA_NGINX_MODULE_VERSION=0.10.29
 ARG NGX_DEVEL_KIT_VERSION=0.3.3
 ARG LUA_CJSON_VERSION=2.1.0.14
@@ -69,7 +69,7 @@ RUN mkdir /modules-out \
 # =============================================================================
 # Final image
 # =============================================================================
-FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.0
+FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:2.6.2
 
 USER root
 
